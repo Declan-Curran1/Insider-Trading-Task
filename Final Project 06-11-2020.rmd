@@ -1,0 +1,710 @@
+---
+title: "3422 Project"
+author: "Kieran"
+date: "02/11/2020"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+options(knitr.duplicate.label = "allow")
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+summary(cars)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
+```{r setup1, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+```{r}
+{cat("\014")
+  rm(list=ls(all=TRUE))
+  options(digits=6)}
+```
+
+```{r}
+setwd("D:/University/2020/Semester 2/FINM3422/Team Project")
+getwd()
+```
+
+```{r}
+#install.packages('quantmod')
+#install.packages('xts')
+#install.packages('ggplot2')
+#install.packages('data.table')
+#install.packages('gridExtra')
+#install.packages('fBasics')
+#install.packages('knitr')
+#install.packages('zoo')
+#install.packages('car')
+#install.packages('lubridate')
+#install.packages('psych')
+#install.packages('tseries')
+#install.packages('fPortfolio')
+```
+
+
+```{r}
+library('xts')
+library('quantmod')
+library('data.table')
+library('ggplot2')
+library('gridExtra')
+library('fBasics')
+library('knitr')
+library('zoo')
+library('psych')
+library('tseries')
+library('fPortfolio')
+library('car')
+library('lubridate')
+```
+
+
+```{r}
+ss=20190101
+se=20200630
+```
+
+```{r}
+sourcedata <- 'yahoo'
+tickers <- c('GABC')
+sampleperiod <- c('2019-01-01','2020-06-30')
+getSymbols(tickers, src = sourcedata, from = sampleperiod[1], to = sampleperiod[2])
+
+```
+
+```{r}
+GABC_Price <- GABC$GABC.Adjusted
+GABC_Price <- as.data.frame(GABC_Price)
+GABC_Price <- setDT(GABC_Price, keep.rownames = TRUE)
+GABC_Price$rn <- as.Date(GABC_Price$rn)
+GABC_Price$rn <- as.integer(format(as.Date(GABC_Price$rn),"%Y%m%d"))
+names(GABC_Price) <- c("Date","GABC Price")
+
+```
+
+
+```{r}
+
+GABC_returns <- data.frame(GABC_Price$Date[2:376],diff(log(GABC_Price$`GABC Price`)))
+names(GABC_returns) <- c("Date", "GABC Returns")
+GABC_returns$Dummy <- ifelse(GABC_returns$Date < 20200201,1,0)
+```
+
+
+```{r}
+GABC.SummaryStats <- data.frame(matrix(NA,nrow(GABC_returns),3))
+colnames(GABC.SummaryStats) <- c("All","Regime 1", "Regime 2")
+GABC.SummaryStats$All <- GABC_returns$`GABC Returns`
+GABC.SummaryStats$`Regime 1`[GABC_returns$Dummy==1] <- GABC_returns$`GABC Returns`[GABC_returns$Dummy==1]
+GABC.SummaryStats$`Regime 2`[GABC_returns$Dummy==0] <- GABC_returns$`GABC Returns`[GABC_returns$Dummy==0]
+```
+
+
+```{r}
+kable(basicStats(GABC.SummaryStats), digits = 3)
+```
+
+
+```{r}
+t.test(GABC.SummaryStats$`Regime 1`, GABC.SummaryStats$`Regime 2`, var.equal = F)
+```
+
+
+```{r}
+Regime_1 <- GABC_returns$Dummy
+Regime_2 <- 1 - Regime_1
+ols_GABC <- lm(GABC_returns$`GABC Returns` ~ Regime_1 + Regime_2 - 1)
+summary(ols_GABC)
+```
+
+
+```{r}
+linearHypothesis(ols_GABC, "Regime_1 = Regime_2", test = c("F","Chisq"))
+```
+
+
+
+
+
+##Q2.
+#Market Model Regression
+```{r}
+market_data <- read.csv("FF3.csv",header = TRUE, row.names = NULL, stringsAsFactors = FALSE)
+market_prem_Q2 <- market_data$Mkt.RF[-which(market_data$DATE < 20190103|market_data$DATE > 20200629)]/100
+market_return_Q2 <- (market_data$Mkt.RF + market_data$RF*100)[-which(market_data$DATE < 20190103|market_data$DATE > 20200629)]/100
+```
+
+```{r}
+market_model <- data.frame(GABC_returns$Date, GABC_returns$`GABC Returns`,market_prem_Q2, market_return_Q2)
+names(market_model) <- c("Date_1","GABC Returns_1","Market Risk Premium_1", "Market Return_1")
+```
+
+```{r}
+Market_model_regression <- lm(market_model$`GABC Returns_1` ~ market_model$`Market Return_1`)
+summary(Market_model_regression)
+```
+
+
+#Fama-French Three-factor Model Regression
+```{r}
+Stock_prem_Q2 <- market_model$`GABC Returns_1` - market_data$RF[-which(market_data$DATE < 20190103|market_data$DATE > 20200629)]
+SMB_Q2 <- market_data$SMB[-which(market_data$DATE < 20190103|market_data$DATE > 20200629)]/100
+HML_Q2 <- market_data$HML[-which(market_data$DATE < 20190103|market_data$DATE > 20200629)]/100
+```
+
+Fama_french_regression <- lm(Stock_prem_Q2 ~ market_prem_Q2 + SMB_Q2 + HML_Q2)
+summary(Fama_french_regression)
+summary(Fama_french_regression)$coefficients
+View(lm(Stock_prem_Q2))
+
+
+
+```{r}
+
+rf      <- market_data$RF[2266:2640]
+mkt     <- market_data$Mkt.RF[2266:2640] + rf # MKT.RF is excess returns, hence add RF to get mkt return
+Mkt_Excess_Returns   <- mkt - rf # simple market excess returns
+Mkt_Excess_Returns <- Mkt_Excess_Returns/100 #Change the format so that it matches the convention with GABC_Excess_Returns
+View(Mkt_Excess_Returns)
+
+GABC_Excess_Returns <- market_model$`GABC Returns_1` #Raw daily returns for GABC
+View(GABC_Excess_Returns)
+
+
+#GABC_Excess_Returns <- market_model$`GABC Returns_1` - market_data$RF[2266:2640] (It requests that we use the raw daily data for GABC)
+#Risk_Free <- log(1+market_data$RF[2266:2640]) (In case we do need to adjust above figure)
+
+
+beta <- matrix(NA, length(Mkt_Excess_Returns)-250,1)
+estwindow <- 250 #Ling stated 250 was a good length for daily time-varying beta in Part 2 Lecture 7 45:37
+
+for(i in estwindow:length(GABC_Excess_Returns)){
+  ols <- lm(GABC_Excess_Returns[i-estwindow+1:i] ~ Mkt_Excess_Returns[i-estwindow+1:i])
+  beta[i-estwindow,1] = summary(ols)$coefficients[2,1]
+}
+#Using for-loop to calculate Beta on GABC in Market Model, with 250 days as a basis, we are able to calculate 125 observations of Beta 
+
+summary(ols)
+
+#Calculate for Fama_French_Model
+beta_FF3 <- matrix(NA, length(Mkt_Excess_Returns)-250,1)
+beta_SMB_FF3 <- matrix(NA, length(Mkt_Excess_Returns)-250,1)
+beta_HML_FF3 <- matrix(NA, length(Mkt_Excess_Returns)-250,1)
+
+for(i in estwindow:length(Stock_prem_Q2)){
+  ols_FF3 <- lm(Stock_prem_Q2[i-estwindow+1:i] ~ market_prem_Q2[i-estwindow+1:i] + SMB_Q2[i-estwindow+1:i] + HML_Q2[i-estwindow+1:i])
+  beta_FF3[i-estwindow,1] = summary(ols_FF3)$coefficients[2,1]
+  beta_SMB_FF3[i-estwindow,1] = summary(ols_FF3)$coefficients[3,1]
+  beta_HML_FF3[i-estwindow,1] = summary(ols_FF3)$coefficients[4,1]
+}
+
+summary(ols_FF3)
+
+#Graph <- data.frame(GABC_returns$Date[251:375])
+#Graph$FF3 <- as.data.frame(beta_FF3)
+#Graph$MM <- as.data.frame(beta)
+#names(Graph) <- c("Date","FF3_2","MM_2")
+```
+
+
+```{r} 
+#Please ensure you run the whole chunk or you will get an error where the plot does not add the second line for Beta(The internet has trouble answering why this is occuring; See stackoverflow for further details)
+sequence <- seq(1, 125, by=1)#Creating column for days since there was enough data to calculate betas
+plot(sequence,beta_FF3[,1], type="l", lwd=2, col='blue', 
+     xlab='Days since 31 December 2019', ylab='Time-Varying betas', ylim=c(0.2,5), main='Daily Beta Values for FF3 vs MM', cex.main=1.5)
+lines(sequence, beta[,1], type="l", lwd=2, col='orange')#Adding in MM Beta line
+```
+
+```{r}
+##Seperate time varying betas to for market Model into regime 1 and regime 2
+Beta_DATAFRAME <- data.frame(beta)
+Beta_DATAFRAME <- cbind(Beta_DATAFRAME, "observation"=1:nrow(Beta_DATAFRAME))
+Beta_DATAFRAME$Dummy <- ifelse(Beta_DATAFRAME$observation < 23,1,0)
+
+
+Beta_summary_stats <- data.frame(matrix(NA,nrow(Beta_DATAFRAME),3))
+colnames(Beta_summary_stats) <- c("All","Regime 1", "Regime 2")
+Beta_summary_stats$All <- Beta_DATAFRAME$`beta`
+
+Beta_summary_stats$`Regime 1`[Beta_DATAFRAME$Dummy==1] <- Beta_DATAFRAME$`beta`[Beta_DATAFRAME$Dummy==1]
+
+Beta_summary_stats$`Regime 2`[Beta_DATAFRAME$Dummy==0] <- Beta_DATAFRAME$`beta`[Beta_DATAFRAME$Dummy==0]
+```
+
+```{r}
+kable(basicStats(Beta_summary_stats), digits = 3)
+```
+
+```{r}
+##conduct t-test to determine if regime 1 and regime 2 are statistically significantly different
+t.test(Beta_summary_stats$`Regime 1`, Beta_summary_stats$`Regime 2`, var.equal = F)
+#The beta values for the market model in regime 1 and regime 2 are significantly different with a t-test value of -20.33.
+```
+
+
+
+```{r}
+##Seperate time varying betas to for Fama-French Model into regime 1 and regime 2
+
+Beta_FF3_DATAFRAME <- data.frame(beta_FF3)
+Beta_FF3_DATAFRAME <- cbind(Beta_FF3_DATAFRAME, "observation"=1:nrow(Beta_FF3_DATAFRAME))
+Beta_FF3_DATAFRAME$Dummy <- ifelse(Beta_FF3_DATAFRAME$observation < 23,1,0)
+
+
+Beta_FF3_summary_stats <- data.frame(matrix(NA,nrow(Beta_FF3_DATAFRAME),3))
+colnames(Beta_FF3_summary_stats) <- c("All","Regime 1", "Regime 2")
+Beta_FF3_summary_stats$All <- Beta_FF3_DATAFRAME$`beta_FF3`
+
+Beta_FF3_summary_stats$`Regime 1`[Beta_FF3_DATAFRAME$Dummy==1] <- Beta_FF3_DATAFRAME$`beta_FF3`[Beta_FF3_DATAFRAME$Dummy==1]
+
+Beta_FF3_summary_stats$`Regime 2`[Beta_FF3_DATAFRAME$Dummy==0] <- Beta_FF3_DATAFRAME$`beta_FF3`[Beta_FF3_DATAFRAME$Dummy==0]
+```
+
+```{r}
+kable(basicStats(Beta_FF3_summary_stats), digits = 3)
+```
+
+```{r}
+##conduct t-test to determine if regime 1 and regime 2 are statistically significantly different
+t.test(Beta_FF3_summary_stats$`Regime 1`, Beta_FF3_summary_stats$`Regime 2`, var.equal = F)
+##Under the Fama-French model the betas for regime 1 and regime 2 are also significantly different with a t-value of -5.64.
+```
+
+```{r} 
+#Q5
+##plot SMB and HML
+plot(sequence,beta_SMB_FF3[,1], type="l", lwd=2, col='blue',
+     xlab='Days since 31 December 2019', ylab='Time-Varying Factor Loading', ylim=c(0.35,0.81),
+     main='SMB and HML', cex.main=1.5)
+lines(sequence,beta_HML_FF3[,1], type="l", lwd=2, col='orange')
+
+```
+
+```{r} 
+##Seperate SMB values into regime 1 and regime 2
+Beta_SMB_DATAFRAME <- data.frame(beta_SMB_FF3)
+Beta_SMB_DATAFRAME <- cbind(Beta_SMB_DATAFRAME, "observation"=1:nrow(Beta_SMB_DATAFRAME))
+Beta_SMB_DATAFRAME$Dummy <- ifelse(Beta_SMB_DATAFRAME$observation < 23,1,0)
+
+
+Beta_SMB_summary_stats <- data.frame(matrix(NA,nrow(Beta_SMB_DATAFRAME),3))
+colnames(Beta_SMB_summary_stats) <- c("All","Regime 1", "Regime 2")
+Beta_SMB_summary_stats$All <- Beta_SMB_DATAFRAME$`beta_SMB_FF3`
+
+Beta_SMB_summary_stats$`Regime 1`[Beta_SMB_DATAFRAME$Dummy==1] <- Beta_SMB_DATAFRAME$`beta_SMB_FF3`[Beta_SMB_DATAFRAME$Dummy==1]
+
+Beta_SMB_summary_stats$`Regime 2`[Beta_SMB_DATAFRAME$Dummy==0] <- Beta_SMB_DATAFRAME$`beta_SMB_FF3`[Beta_SMB_DATAFRAME$Dummy==0]
+
+```
+
+```{r}
+kable(basicStats(Beta_SMB_summary_stats), digits = 3)
+```
+
+```{r}
+##conduct t-test to determine if regime 1 and regime 2 are statistically significantly different
+t.test(Beta_SMB_summary_stats$`Regime 1`, Beta_SMB_summary_stats$`Regime 2`, var.equal = F)
+
+## t = 7.834 therefore statistically significantly different
+```
+
+```{r}
+##repeat above process for HML values
+
+Beta_HML_DATAFRAME <- data.frame(beta_HML_FF3)
+Beta_HML_DATAFRAME <- cbind(Beta_HML_DATAFRAME, "observation"=1:nrow(Beta_HML_DATAFRAME))
+Beta_HML_DATAFRAME$Dummy <- ifelse(Beta_HML_DATAFRAME$observation < 23,1,0)
+
+Beta_HML_summary_stats <- data.frame(matrix(NA,nrow(Beta_HML_DATAFRAME),3))
+colnames(Beta_HML_summary_stats) <- c("All","Regime 1", "Regime 2")
+Beta_HML_summary_stats$All <- Beta_HML_DATAFRAME$`beta_HML_FF3`
+
+Beta_HML_summary_stats$`Regime 1`[Beta_HML_DATAFRAME$Dummy==1] <- Beta_HML_DATAFRAME$`beta_HML_FF3`[Beta_HML_DATAFRAME$Dummy==1]
+
+Beta_HML_summary_stats$`Regime 2`[Beta_HML_DATAFRAME$Dummy==0] <- Beta_HML_DATAFRAME$`beta_HML_FF3`[Beta_HML_DATAFRAME$Dummy==0]
+
+```
+
+```{r}
+kable(basicStats(Beta_HML_summary_stats), digits = 3)
+```
+
+```{r}
+##conduct t-test to determine if regime 1 and regime 2 are statistically significantly different
+t.test(Beta_HML_summary_stats$`Regime 1`, Beta_HML_summary_stats$`Regime 2`, var.equal = F)
+##With a t-value of 7.504 the betas for HML for the two regimes can be considered significantly different.
+```
+
+
+#Question 6 
+#Calculate the cumulative raw returns for 100 days after each insider transaction
+
+```{r}
+Insider_Trades <- read.csv('gabc_bank.csv', header=TRUE, row.names = NULL, stringsAsFactors = FALSE)
+Insider_Trades$Date <- as.POSIXct(Insider_Trades$TRANDATE, format="%m/%d/%Y")
+
+Insider_Trades$Date1 <- as.Date(Insider_Trades$Date)
+Insider_Trades$Date1 <- as.integer(format(as.Date(Insider_Trades$Date),"%Y%m%d"))+1
+
+
+#New sample period to include 100 days after last day such that we can calculate returns
+sourcedata <- 'yahoo'
+tickers <- c('GABC')
+sampleperiodnew <- c('2019-01-01','2020-10-29') #29th October is 100 days after the last Transaction
+getSymbols(tickers, src = sourcedata, from = sampleperiodnew[1], to = sampleperiodnew[2])
+
+GABC_Price_New <- GABC$GABC.Adjusted
+GABC_Price_New <- as.data.frame(GABC_Price_New)
+GABC_Price_New <- setDT(GABC_Price_New, keep.rownames = TRUE)
+GABC_Price_New$rn <- as.Date(GABC_Price_New$rn)
+GABC_Price_New$rn <- as.integer(format(as.Date(GABC_Price_New$rn),"%Y%m%d"))
+names(GABC_Price_New) <- c("Date","GABC Price")
+
+#Find the one-day returns for GABC 
+for(i in 1:461){
+  GABC_Price_New$Return[i] <- (GABC_Price_New[i+1,2]-GABC_Price_New[i,2])/GABC_Price_New[i,2]
+  
+}
+#Create data frame with returns corresponding to 100 days after each transaction (T1 first transa, T2 2nd ...)
+GABC_Price_100 <- data.frame(1:101)
+GABC_Price_100$T1 <- GABC_Price_New$Return[10:110]
+GABC_Price_100$T2 <- GABC_Price_New$Return[34:134]
+GABC_Price_100$T3 <- GABC_Price_New$Return[35:135]
+GABC_Price_100$T4 <- GABC_Price_New$Return[45:145]
+GABC_Price_100$T5 <- GABC_Price_New$Return[51:151]
+GABC_Price_100$T6 <- GABC_Price_New$Return[53:153]
+GABC_Price_100$T7 <- GABC_Price_New$Return[54:154]
+GABC_Price_100$T8 <- GABC_Price_New$Return[55:155]
+GABC_Price_100$T9 <- GABC_Price_New$Return[56:156]
+GABC_Price_100$T10 <- GABC_Price_New$Return[57:157]
+GABC_Price_100$T11 <- GABC_Price_New$Return[72:172]
+GABC_Price_100$T12 <- GABC_Price_New$Return[93:193]
+GABC_Price_100$T13 <- GABC_Price_New$Return[115:215]
+GABC_Price_100$T14 <- GABC_Price_New$Return[134:234]
+GABC_Price_100$T15 <- GABC_Price_New$Return[157:257]
+GABC_Price_100$T16 <- GABC_Price_New$Return[178:278]
+GABC_Price_100$T17 <- GABC_Price_New$Return[199:299]
+GABC_Price_100$T18 <- GABC_Price_New$Return[222:322]
+GABC_Price_100$T19 <- GABC_Price_New$Return[242:342]
+GABC_Price_100$T20 <- GABC_Price_New$Return[262:362]
+GABC_Price_100$T21 <- GABC_Price_New$Return[264:364]
+GABC_Price_100$T22 <- GABC_Price_New$Return[284:384]
+GABC_Price_100$T23 <- GABC_Price_New$Return[288:388]
+GABC_Price_100$T24 <- GABC_Price_New$Return[297:397]
+GABC_Price_100$T25 <- GABC_Price_New$Return[298:398]
+GABC_Price_100$T26 <- GABC_Price_New$Return[299:399]
+GABC_Price_100$T27 <- GABC_Price_New$Return[301:401]
+GABC_Price_100$T28 <- GABC_Price_New$Return[302:402]
+GABC_Price_100$T29 <- GABC_Price_New$Return[303:403]
+GABC_Price_100$T30 <- GABC_Price_New$Return[324:424]
+GABC_Price_100$T31 <- GABC_Price_New$Return[346:446]
+GABC_Price_100$T32 <- GABC_Price_New$Return[348:448]
+
+#Create Cumulative Raw Returns
+GABC_Cum_Sum_100 <- data.frame(1:101)
+for(i in 1:32){
+  GABC_Cum_Sum_100[i] <- cumsum(GABC_Price_100[,i+1])
+}
+#Average each row and split by regime to find average CRRs per day
+  GABC_Cum_Sum_Avg <- data.frame(1:101)
+  GABC_Cum_Sum_Avg$all <- rowMeans(GABC_Cum_Sum_100)
+  GABC_Cum_Sum_Avg$Reg1 <- rowMeans(GABC_Cum_Sum_100[,1:21])
+  GABC_Cum_Sum_Avg$Reg2 <- rowMeans(GABC_Cum_Sum_100[,22:32])
+
+```
+
+Question 7
+
+```{r}
+
+#Plot line for all and each regime with key
+#must run as chunk for lines to be added correctly
+plot(GABC_Cum_Sum_Avg$X1.101,GABC_Cum_Sum_Avg$all, type="l", lwd=2, col='blue', 
+     xlab='Days after Transaction', ylab='Cumulative Raw Return', ylim=c(-0.05,0.2), main='Average Insider CRRs by Regime')
+lines(GABC_Cum_Sum_Avg$X1.101, GABC_Cum_Sum_Avg$Reg1, type="l", lwd=2, col='green')#Adding in MM Beta line
+lines(GABC_Cum_Sum_Avg$X1.101, GABC_Cum_Sum_Avg$Reg2, type="l", lwd=2, col='red')
+legend('topleft', lty=c(1,1), legend = c("All","Reg1","Reg2"), col=c('blue','green','red'),lwd=2)
+
+
+```
+Question 8
+
+```{r}
+
+#create summary stats and run t-test for each window [0,10], [0,50] and [0,100] by regime 
+#Please note "basicstats" requires installation of "fBasics" (at beginning of R Markdown file)
+
+GABC_Cum_Sum_Avg$X1.101 <- NULL
+#statistics for [0,10]
+Regime_SummaryStats10 <- basicStats(GABC_Cum_Sum_Avg$all[1:11])
+Regime_SummaryStats10$Reg1 <- basicStats(GABC_Cum_Sum_Avg$Reg1[1:11])
+Regime_SummaryStats10$Reg2 <- basicStats(GABC_Cum_Sum_Avg$Reg2[1:11])
+kable(basicStats(Regime_SummaryStats10),digits=3)
+
+Regime_SummaryStats50 <- basicStats(GABC_Cum_Sum_Avg$all[1:51])
+Regime_SummaryStats50$Reg1 <- basicStats(GABC_Cum_Sum_Avg$Reg1[1:51])
+Regime_SummaryStats50$Reg2 <- basicStats(GABC_Cum_Sum_Avg$Reg2[1:51])
+kable(basicStats(Regime_SummaryStats50),digits=3)
+
+Regime_SummaryStats100 <- basicStats(GABC_Cum_Sum_Avg)
+kable(basicStats(Regime_SummaryStats100),digits=3)
+
+t.test(GABC_Cum_Sum_Avg$Reg1[1:11], GABC_Cum_Sum_Avg$Reg2[1:11], var.equal = F)
+t.test(GABC_Cum_Sum_Avg$Reg1[1:51], GABC_Cum_Sum_Avg$Reg2[1:51], var.equal = F)
+t.test(GABC_Cum_Sum_Avg$Reg1, GABC_Cum_Sum_Avg$Reg2, var.equal = F)
+
+
+```
+#The P-Value for each test is much smaller than the 1% threshhold.
+#This indicates that insider trades are more profitable during COVID-19 at a statistically significant level
+
+
+#Bonus Question
+
+```{r}
+#Create Excess returns and GABC price data corresponding to period (180 days before first transaction to 100 days after last transaction)
+#Market data is not available for 100 days after last transaction (29th October), therefore use data for regime 2 until last transaction with data allowing full calculation
+
+##SIMPLE MARKET MODEL
+rf_AR      <- market_data$RF[2094:2668]
+mkt_AR     <- market_data$Mkt.RF[2094:2668] + rf # MKT.RF is excess returns, hence add RF to get mkt return
+Mkt_Excess_Returns_AR   <- mkt_AR - rf_AR # simple market excess returns
+
+GABC_Excess_Returns <- market_model$`GABC Returns_1` #Raw daily returns for GABC
+
+sourcedata <- 'yahoo'
+tickers <- c('GABC')
+sampleperiodnew <- c('2018-04-27','2020-08-11') 
+getSymbols(tickers, src = sourcedata, from = sampleperiodnew[1], to = sampleperiodnew[2])
+  
+GABC_Price_New_AR <- GABC$GABC.Adjusted
+GABC_Price_New_AR <- as.data.frame(GABC_Price_New_AR)
+GABC_Price_New_AR <- setDT(GABC_Price_New_AR, keep.rownames = TRUE)
+GABC_Price_New_AR$rn <- as.Date(GABC_Price_New_AR$rn)
+GABC_Price_New_AR$rn <- as.integer(format(as.Date(GABC_Price_New_AR$rn),"%Y%m%d"))
+
+names(GABC_Price_New_AR) <- c("Date","GABC Price")
+
+#Find the one-day returns for GABC 
+for(i in 1:576){
+  GABC_Price_New_AR$Return[i] <- (GABC_Price_New_AR[i+1,2]-GABC_Price_New_AR[i,2])/GABC_Price_New_AR[i,2]
+  
+}
+#Remove last row as it is NA and create Beta Data frame
+GABC_Price_New_AR <- GABC_Price_New_AR[-c(576), ]
+GABC_Price_New_AR$Return <- as.numeric(GABC_Price_New_AR$Return)
+beta1 <- matrix(NA, length(Mkt_Excess_Returns_AR)-160,1)
+estwindow <- 160 #[-180:-20]
+
+#Calculate Betas with loop pulling relevant data points for calculation
+for(i in estwindow:length(GABC_Price_New_AR$Return)){
+  ols <- lm(GABC_Price_New_AR$Return[i-estwindow+1:i] ~ Mkt_Excess_Returns_AR[i-estwindow+1:i])
+  beta1[i-estwindow,1] = summary(ols)$coefficients[2,1]
+}
+#Calculate abnormal returns (Do not use first 20 Betas as these are the points between the estimation window first transaction date)
+Returns_MM <- data.frame(1:395)
+Returns_MM$ExpRet <- as.numeric((rf_AR[181:575] + beta1[21:415] * Mkt_Excess_Returns_AR[181:575]))
+Returns_MM$Returns <- as.numeric(GABC_Price_New_AR$Return[181:575])
+Returns_MM$AR <- (Returns_MM$ExpRet-Returns_MM$Returns)
+
+#Create column with abnormal returns corresponding to 100 days after each transaction
+GABC_AR <- data.frame(1:101)
+GABC_AR$T1 <- Returns_MM$AR[1:101]
+GABC_AR$T2 <- Returns_MM$AR[25:125]
+GABC_AR$T3 <- Returns_MM$AR[26:126]
+GABC_AR$T4 <- Returns_MM$AR[36:136]
+GABC_AR$T5 <- Returns_MM$AR[42:142]
+GABC_AR$T6 <- Returns_MM$AR[44:144]
+GABC_AR$T7 <- Returns_MM$AR[45:145]
+GABC_AR$T8 <- Returns_MM$AR[46:146]
+GABC_AR$T9 <- Returns_MM$AR[47:147]
+GABC_AR$T10 <- Returns_MM$AR[48:148]
+GABC_AR$T11 <- Returns_MM$AR[63:163]
+GABC_AR$T12 <- Returns_MM$AR[84:184]
+GABC_AR$T13 <- Returns_MM$AR[106:206]
+GABC_AR$T14 <- Returns_MM$AR[125:225]
+GABC_AR$T15 <- Returns_MM$AR[148:248]
+GABC_AR$T16 <- Returns_MM$AR[169:269]
+GABC_AR$T17 <- Returns_MM$AR[190:290]
+GABC_AR$T18 <- Returns_MM$AR[213:313]
+GABC_AR$T19 <- Returns_MM$AR[233:333]
+GABC_AR$T20 <- Returns_MM$AR[251:351]
+GABC_AR$T21 <- Returns_MM$AR[253:353]
+GABC_AR$T22 <- Returns_MM$AR[275:375]
+GABC_AR$T23 <- Returns_MM$AR[279:379]
+GABC_AR$T24 <- Returns_MM$AR[288:388]
+GABC_AR$T25 <- Returns_MM$AR[289:389]
+GABC_AR$T26 <- Returns_MM$AR[290:390]
+GABC_AR$T27 <- Returns_MM$AR[292:392]
+GABC_AR$T28 <- Returns_MM$AR[293:393]
+GABC_AR$T29 <- Returns_MM$AR[294:394]
+
+
+GABC_Cum_Sum_AR <- data.frame(1:101)
+for(i in 1:29){
+  GABC_Cum_Sum_AR[i] <- cumsum(GABC_AR[,i+1])
+}
+#Average CAR rows for each regime
+  GABC_Cum_Sum_AR_Avg <- data.frame(1:101)
+  GABC_Cum_Sum_AR_Avg$all <- rowMeans(GABC_Cum_Sum_AR)
+  GABC_Cum_Sum_AR_Avg$Reg1 <- rowMeans(GABC_Cum_Sum_AR[,1:21])
+  GABC_Cum_Sum_AR_Avg$Reg2 <- rowMeans(GABC_Cum_Sum_AR[,22:29])
+  
+##FAMA FRENCH 3 FACTOR MODEL
+  
+#Create relevant data sets for use in Fama French
+market_prem_Q2 <- market_data$Mkt.RF[-which(market_data$DATE < 20180427|market_data$DATE > 20200807)]/100  
+Stock_prem_Q2 <- GABC_Price_New_AR$Return - market_data$RF[-which(market_data$DATE < 20180427|market_data$DATE > 20200807)]
+SMB_Q2 <- market_data$SMB[-which(market_data$DATE < 20180427|market_data$DATE > 20200807)]/100
+HML_Q2 <- market_data$HML[-which(market_data$DATE < 20180427|market_data$DATE > 20200807)]/100
+
+#Create Beta matrices for use in FF3 Calculation 
+beta_FF3_CAR <- matrix(NA, length(Mkt_Excess_Returns_AR)-160,1)
+beta_SMB_FF3_CAR <- matrix(NA, length(Mkt_Excess_Returns_AR)-160,1)
+beta_HML_FF3_CAR <- matrix(NA, length(Mkt_Excess_Returns_AR)-160,1)
+intercept_CAR <- matrix(NA, length(Mkt_Excess_Returns_AR)-160,1)
+
+#Create and pull data to populate matrices with abnormal returns
+for(i in estwindow:length(Stock_prem_Q2)){
+  ols_FF3_CAR <- lm(Stock_prem_Q2[i-estwindow+1:i] ~ market_prem_Q2[i-estwindow+1:i] + SMB_Q2[i-estwindow+1:i] + HML_Q2[i-estwindow+1:i])
+  intercept_CAR[i-estwindow,1] = summary(ols_FF3_CAR)$coefficients[1,1]
+  beta_FF3_CAR[i-estwindow,1] = summary(ols_FF3_CAR)$coefficients[2,1]
+  beta_SMB_FF3_CAR[i-estwindow,1] = summary(ols_FF3_CAR)$coefficients[3,1]
+  beta_HML_FF3_CAR[i-estwindow,1] = summary(ols_FF3_CAR)$coefficients[4,1]
+}
+
+ 
+summary(ols_FF3_CAR)
+
+#Do not include the first 20 as this accounts for the [-180,-20] buffer where the first 20 values are before the first transaction date
+Returns_FF3_AR <- data.frame(NA)
+Returns_FF3_AR <- intercept_CAR[21:415] + beta_FF3_CAR[21:415] * market_prem_Q2[181:575] + beta_SMB_FF3_CAR[21:415] * SMB_Q2[181:575] + beta_HML_FF3_CAR[21:415] * HML_Q2[181:575]
+
+#Create column with abnormal returns corresponding to 100 days after each transaction
+GABC_AR_FF3 <- data.frame(1:101)
+GABC_AR_FF3$T1 <- Returns_FF3_AR[1:101]
+GABC_AR_FF3$T2 <- Returns_FF3_AR[25:125]
+GABC_AR_FF3$T3 <- Returns_FF3_AR[26:126]
+GABC_AR_FF3$T4 <- Returns_FF3_AR[36:136]
+GABC_AR_FF3$T5 <- Returns_FF3_AR[42:142]
+GABC_AR_FF3$T6 <- Returns_FF3_AR[44:144]
+GABC_AR_FF3$T7 <- Returns_FF3_AR[45:145]
+GABC_AR_FF3$T8 <- Returns_FF3_AR[46:146]
+GABC_AR_FF3$T9 <- Returns_FF3_AR[47:147]
+GABC_AR_FF3$T10 <- Returns_FF3_AR[48:148]
+GABC_AR_FF3$T11 <- Returns_FF3_AR[63:163]
+GABC_AR_FF3$T12 <- Returns_FF3_AR[84:184]
+GABC_AR_FF3$T13 <- Returns_FF3_AR[106:206]
+GABC_AR_FF3$T14 <- Returns_FF3_AR[125:225]
+GABC_AR_FF3$T15 <- Returns_FF3_AR[148:248]
+GABC_AR_FF3$T16 <- Returns_FF3_AR[169:269]
+GABC_AR_FF3$T17 <- Returns_FF3_AR[190:290]
+GABC_AR_FF3$T18 <- Returns_FF3_AR[213:313]
+GABC_AR_FF3$T19 <- Returns_FF3_AR[233:333]
+GABC_AR_FF3$T20 <- Returns_FF3_AR[251:351]
+GABC_AR_FF3$T21 <- Returns_FF3_AR[253:353]
+GABC_AR_FF3$T22 <- Returns_FF3_AR[275:375]
+GABC_AR_FF3$T23 <- Returns_FF3_AR[279:379]
+GABC_AR_FF3$T24 <- Returns_FF3_AR[288:388]
+GABC_AR_FF3$T25 <- Returns_FF3_AR[289:389]
+GABC_AR_FF3$T26 <- Returns_FF3_AR[290:390]
+GABC_AR_FF3$T27 <- Returns_FF3_AR[292:392]
+GABC_AR_FF3$T28 <- Returns_FF3_AR[293:393]
+GABC_AR_FF3$T29 <- Returns_FF3_AR[294:394]
+
+GABC_Cum_Sum_AR_FF3 <- data.frame(1:101)
+for(i in 1:29){
+  GABC_Cum_Sum_AR_FF3[i] <- cumsum(GABC_AR_FF3[,i+1])
+}
+
+#Average CAR rows for each regime
+GABC_Cum_Sum_AR_Avg_FF3 <- data.frame(1:101)
+  GABC_Cum_Sum_AR_Avg_FF3$all <- rowMeans(GABC_Cum_Sum_AR_FF3)
+  GABC_Cum_Sum_AR_Avg_FF3$Reg1 <- rowMeans(GABC_Cum_Sum_AR_FF3[,1:21])
+  GABC_Cum_Sum_AR_Avg_FF3$Reg2 <- rowMeans(GABC_Cum_Sum_AR_FF3[,22:29])
+
+```
+
+```{r}
+#B)
+#Create Plot for CARs by Regime with data from Market model and FF3
+plot(GABC_Cum_Sum_AR_Avg$X1.101,GABC_Cum_Sum_AR_Avg$all, type="l", lwd=2, col='Darkgreen', 
+     xlab='Days after Transaction', ylab='Cumulative Abnormal Return', ylim=c(-1,1), main='Market and FF3 Model Average Insider CARs by Regime')
+lines(GABC_Cum_Sum_AR_Avg$X1.101, GABC_Cum_Sum_AR_Avg$Reg1, type="l", lwd=2, col='Darkblue')#Adding in MM Beta line
+lines(GABC_Cum_Sum_AR_Avg$X1.101, GABC_Cum_Sum_AR_Avg$Reg2, type="l", lwd=2, col='Darkred')
+lines(GABC_Cum_Sum_AR_Avg$X1.101, GABC_Cum_Sum_AR_Avg_FF3$all, type="l", lwd=2, col='chartreuse')#Adding in MM Beta line
+lines(GABC_Cum_Sum_AR_Avg_FF3$X1.101, GABC_Cum_Sum_AR_Avg_FF3$Reg1, type="l", lwd=2, col='lightblue')
+lines(GABC_Cum_Sum_AR_Avg_FF3$X1.101, GABC_Cum_Sum_AR_Avg_FF3$Reg2, type="l", lwd=2, col='Coral3')#Adding in MM Beta line
+legend('topleft', lty=c(1,1), legend = c("All_MM","Reg1_MM","Reg2_MM","All_FF3","Reg1_FF3","Reg2_FF3"), col=c('Darkgreen','Darkblue','Darkred','chartreuse','Lightblue','Coral3'),lwd=2)
+
+
+```
+
+```{r}
+
+#Create summaries and run t-test for each regime in MM and FF3 model for the relevant Windows
+GABC_Cum_Sum_AR_Avg$X1.101 <- NULL
+#statistics for [0,10]
+Regime_SummaryStats10_MM <- basicStats(GABC_Cum_Sum_AR_Avg$all[1:11])
+Regime_SummaryStats10_MM$Reg1 <- basicStats(GABC_Cum_Sum_AR_Avg$Reg1[1:11])
+Regime_SummaryStats10_MM$Reg2 <- basicStats(GABC_Cum_Sum_AR_Avg$Reg2[1:11])
+kable(basicStats(Regime_SummaryStats10_MM),digits=3)
+
+Regime_SummaryStats50_MM <- basicStats(GABC_Cum_Sum_AR_Avg$all[1:51])
+Regime_SummaryStats50_MM$Reg1 <- basicStats(GABC_Cum_Sum_AR_Avg$Reg1[1:51])
+Regime_SummaryStats50_MM$Reg2 <- basicStats(GABC_Cum_Sum_AR_Avg$Reg2[1:51])
+kable(basicStats(Regime_SummaryStats50_MM),digits=3)
+
+Regime_SummaryStats100_MM <- basicStats(GABC_Cum_Sum_AR_Avg)
+kable(basicStats(Regime_SummaryStats100_MM),digits=3)
+
+t.test(GABC_Cum_Sum_AR_Avg$Reg1[1:11], GABC_Cum_Sum_AR_Avg$Reg2[1:11], var.equal = F)
+t.test(GABC_Cum_Sum_AR_Avg$Reg1[1:51], GABC_Cum_Sum_AR_Avg$Reg2[1:51], var.equal = F)
+t.test(GABC_Cum_Sum_AR_Avg$Reg1, GABC_Cum_Sum_AR_Avg$Reg2, var.equal = F)
+
+#FF3
+
+GABC_Cum_Sum_AR_Avg_FF3$X1.101 <- NULL
+#statistics for [0,10]
+Regime_SummaryStats10_FF3 <- basicStats(GABC_Cum_Sum_AR_Avg_FF3$all[1:11])
+Regime_SummaryStats10_FF3$Reg1 <- basicStats(GABC_Cum_Sum_AR_Avg_FF3$Reg1[1:11])
+Regime_SummaryStats10_FF3$Reg2 <- basicStats(GABC_Cum_Sum_AR_Avg_FF3$Reg2[1:11])
+kable(basicStats(Regime_SummaryStats10_FF3),digits=3)
+
+Regime_SummaryStats50_FF3 <- basicStats(GABC_Cum_Sum_AR_Avg_FF3$all[1:51])
+Regime_SummaryStats50_FF3$Reg1 <- basicStats(GABC_Cum_Sum_AR_Avg_FF3$Reg1[1:51])
+Regime_SummaryStats50_FF3$Reg2 <- basicStats(GABC_Cum_Sum_AR_Avg_FF3$Reg2[1:51])
+kable(basicStats(Regime_SummaryStats50_FF3),digits=3)
+
+Regime_SummaryStats100_FF3 <- basicStats(GABC_Cum_Sum_AR_Avg_FF3)
+kable(basicStats(Regime_SummaryStats100_FF3),digits=3)
+
+t.test(GABC_Cum_Sum_AR_Avg_FF3$Reg1[1:11], GABC_Cum_Sum_AR_Avg_FF3$Reg2[1:11], var.equal = F)
+t.test(GABC_Cum_Sum_AR_Avg_FF3$Reg1[1:51], GABC_Cum_Sum_AR_Avg_FF3$Reg2[1:51], var.equal = F)
+t.test(GABC_Cum_Sum_AR_Avg_FF3$Reg1, GABC_Cum_Sum_AR_Avg_FF3$Reg2, var.equal = F)
+```
+##Each test is significant at the 1% significance leve except the MM [1:11] Regime 1 and 2 difference, likely due to #the much smaller sample size (still significant at 5%)
+##Therefore in the MM model, at a statiscally significant level insider trades during regime 1 generated higher #abnormal returns,while in the FF3 Model insider trades from regime 2 received higher abnormal returns that 1. 
+#In the MM model abnormal returns were generally positive whereas in the FF3 model abnormal returns were negative, #generally trending linearly in their respective directions
